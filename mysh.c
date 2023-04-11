@@ -104,25 +104,24 @@ int main()
 
             for (int i = 0; token_array[i] != NULL; i++)
             {
-                fprintf(stdout, "token %d: %s, flag: %d\n", i, token_array[i], flag);
+                // fprintf(stdout, "token %d: %s, flag: %d\n", i, token_array[i], flag);
 
                 if (!strcmp(token_array[i], ">")) // redirect output
                 {
-                    fprintf(stdout, "in <\n");
+                    // fprintf(stdout, "in >, about to open %s\n", token_array[i + 1]);
                     flag = 1;
-                    fd = open(token_array[i + 1], O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+                    fd = open(token_array[i + 1], O_RDWR | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
                     to_exec[i] = NULL;
-                    fprintf(stdout, "print1\n");
 
                     if ((pid = fork()) < 0)
                         perror("fork failed");
 
                     if (pid == 0) // child process
                     {
-                        for (int j = 0; j < count; j++)
-                        {
-                            fprintf(stdout, " %d %s\n", j, to_exec[j]);
-                        }
+                        // for (int j = 0; j < count; j++)
+                        // {
+                        //     fprintf(stdout, " %d %s\n", j, to_exec[j]);
+                        // }
 
                         dup2(fd, STDOUT_FILENO); // redirect stdout to the file opened for output
                         if (execvp(to_exec[0], to_exec) < 0)
@@ -143,7 +142,7 @@ int main()
                         if (STDOUT_FILENO != fd)
                             close(fd);
 
-                        continue;
+                        // continue;
                     }
                 }
                 else if (flag == 0)
