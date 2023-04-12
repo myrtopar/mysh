@@ -26,9 +26,19 @@ char *add_whitespaces(char *str, int occur)
     int index = 0;
     while (*str != '\0')
     {
-        if (*str == '>' || *str == '<')
+        if (*str == '|' || *str == '<')
         {
             with_whitespaces[index++] = ' ';
+            with_whitespaces[index++] = *str;
+            with_whitespaces[index++] = ' ';
+        }
+        else if (*str == '>' && *(str + 1) == '>')
+        {
+            with_whitespaces[index++] = ' ';
+            with_whitespaces[index++] = *str;
+        }
+        else if (*str == '>' && *(str - 1) == '>' && *(str + 1) != '>')
+        {
             with_whitespaces[index++] = *str;
             with_whitespaces[index++] = ' ';
         }

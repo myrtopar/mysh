@@ -54,10 +54,10 @@ int main()
         if (count == 0) // αν η γραμμη δεν εχει κανενα token, προχώρα
             continue;
 
-        // for (int i = 0; i < count; i++)
-        // {
-        //     fprintf(stdout, "%s\n", token_array[i]);
-        // }
+        for (int i = 0; i < count; i++)
+        {
+            fprintf(stdout, "%s\n", token_array[i]);
+        }
 
         token_array[count++] = NULL;
 
@@ -97,20 +97,22 @@ int main()
 
         else if (redirect_input_flag || redirect_output_flag) // handling redirections
         {
-            int fd, flag = 0; // flag -> not encountered a > yet. Means that the tokens are part of the command
+            int fd, flag = 0; // flag -> not encountered a > or a < yet. Means that the tokens are part of the command
             char *to_exec[count];
             pid_t pid;
             int status, exit_status;
 
             for (int i = 0; token_array[i] != NULL; i++)
             {
-                // fprintf(stdout, "token %d: %s, flag: %d\n", i, token_array[i], flag);
 
-                if (!strcmp(token_array[i], ">")) // redirect output
+                if (!strcmp(token_array[i], ">") || !strcmp(token_array[i], ">>")) // redirect output
                 {
-                    // fprintf(stdout, "in >, about to open %s\n", token_array[i + 1]);
                     flag = 1;
-                    fd = open(token_array[i + 1], O_RDWR | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+                    if (!strcmp(token_array[i], ">"))
+                        fd = open(token_array[i + 1], O_RDWR | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+                    else if (!strcmp(token_array[i], ">>"))
+                        fd = open(token_array[i + 1], O_RDWR | O_CREAT | O_APPEND, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+
                     to_exec[i] = NULL;
 
                     if ((pid = fork()) < 0)
@@ -118,11 +120,6 @@ int main()
 
                     if (pid == 0) // child process
                     {
-                        // for (int j = 0; j < count; j++)
-                        // {
-                        //     fprintf(stdout, " %d %s\n", j, to_exec[j]);
-                        // }
-
                         dup2(fd, STDOUT_FILENO); // redirect stdout to the file opened for output
                         if (execvp(to_exec[0], to_exec) < 0)
                         {
@@ -138,17 +135,44 @@ int main()
                             perror("waitpid() failed");
                             exit(1);
                         }
-                        dup2(STDOUT_FILENO, fd);
+                        dup2(STDOUT_FILENO, fd); // restore the STDOUT_FILENO fd
                         if (STDOUT_FILENO != fd)
                             close(fd);
+                    }
+                }
+                else if (!strcmp(token_array[i], "<"))
+                {
+                    flag = 1;
+                    fd = open(token_array[i + 1], O_RDONLY);
+                    to_exec[i] = NULL;
 
-                        // continue;
+                    if ((pid = fork()) < 0)
+                        perror("fork failed");
+
+                    if (pid == 0) // child process
+                    {
+                        dup2(fd, STDIN_FILENO); // redirect stdin to the file opened for input
+                        if (execvp(to_exec[0], to_exec) < 0)
+                        {
+                            perror("Error executing command");
+                            printf("Error code: %d\n", errno);
+                            exit(EXIT_FAILURE);
+                        }
+                    }
+                    else if (pid > 0) // parent process
+                    {
+                        if (waitpid(pid, &status, 0) < 0)
+                        {
+                            perror("waitpid() failed");
+                            exit(1);
+                        }
+                        dup2(STDIN_FILENO, fd); // restore the STDIN_FILENO fd
+                        if (STDIN_FILENO != fd)
+                            close(fd);
                     }
                 }
                 else if (flag == 0)
-                {
                     to_exec[i] = token_array[i];
-                }
             }
         }
     }
