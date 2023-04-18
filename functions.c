@@ -5,6 +5,11 @@
 #include <unistd.h>
 #include <sys/wait.h>
 #include <errno.h>
+#include <fcntl.h>
+#include <sys/stat.h>
+
+#define READ 0
+#define WRITE 1
 
 int occurences(char *str, int n)
 {
@@ -49,7 +54,6 @@ char *add_whitespaces(char *str, int occur)
         str++;
     }
     with_whitespaces[index] = '\0';
-    // free(init);
     return with_whitespaces;
 }
 
@@ -66,7 +70,6 @@ int if_exists(char *str, int n)
 
 void execute_simple_command(char **token_array)
 {
-    printf("in simple command\n");
 
     pid_t pid;
     int status, exit_status;
@@ -75,12 +78,11 @@ void execute_simple_command(char **token_array)
 
     if (pid == 0) // child process
     {
-        if (execvp(token_array[0], token_array) < 0)
-        {
-            perror("Error executing command");
-            printf("Error code: %d\n", errno);
-            exit(EXIT_FAILURE);
-        }
+        execvp(token_array[0], token_array);
+
+        perror("Error executing command");
+        printf("Error code: %d\n", errno);
+        exit(EXIT_FAILURE);
     }
     else if (pid > 0) // parent process
     {
@@ -89,5 +91,265 @@ void execute_simple_command(char **token_array)
             perror("waitpid() failed");
             exit(1);
         }
+    }
+}
+
+void handle_redirections(char **token_array)
+{
+    int fd_in, fd_out;
+    pid_t pid;
+    int status;
+
+    for (int i = 0; token_array[i] != NULL; i++)
+    {
+
+        if (!strcmp(token_array[i], ">") || !strcmp(token_array[i], ">>")) // redirect output
+        {
+
+            if (!strcmp(token_array[i], ">"))
+                fd_out = open(token_array[i + 1], O_RDWR | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+            else if (!strcmp(token_array[i], ">>"))
+                fd_out = open(token_array[i + 1], O_RDWR | O_CREAT | O_APPEND, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+
+            token_array[i] = NULL;
+
+            if ((pid = fork()) < 0)
+                perror("fork failed");
+
+            if (pid == 0) // child process
+            {
+                dup2(fd_out, STDOUT_FILENO); // redirect stdout to the file opened for output
+
+                execvp(token_array[0], token_array);
+                perror("Error executing command");
+                printf("Error code: %d\n", errno);
+                exit(EXIT_FAILURE);
+            }
+            else if (pid > 0) // parent process
+            {
+                if (waitpid(pid, &status, 0) < 0)
+                {
+                    perror("waitpid() failed");
+                    exit(1);
+                }
+                dup2(STDOUT_FILENO, fd_out); // restore the STDOUT_FILENO fd
+                if (STDOUT_FILENO != fd_out)
+                    close(fd_out);
+
+                break;
+            }
+        }
+
+        else if (!strcmp(token_array[i], "<"))
+        {
+            fd_in = open(token_array[i + 1], O_RDONLY);
+            token_array[i] = NULL;
+
+            if ((pid = fork()) < 0)
+            {
+                perror("fork failed");
+                exit(EXIT_FAILURE);
+            }
+
+            if (pid == 0) // child process
+            {
+
+                dup2(fd_in, STDIN_FILENO); // redirect stdin to the file opened for input
+
+                if (token_array[i + 2] != NULL)
+                {
+                    if (!strcmp(token_array[i + 2], ">"))
+                    {
+                        fd_out = open(token_array[i + 3], O_RDWR | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+                        dup2(fd_out, STDOUT_FILENO); // redirect stdout to the file opened for output
+                    }
+                    else if (!strcmp(token_array[i + 2], ">>"))
+                    {
+                        fd_out = open(token_array[i + 3], O_RDWR | O_CREAT | O_APPEND, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+                        dup2(fd_out, STDOUT_FILENO); // redirect stdout to the file opened for output
+                    }
+                }
+
+                execvp(token_array[0], token_array);
+                perror("Error executing command");
+                printf("Error code: %d\n", errno);
+                exit(EXIT_FAILURE);
+            }
+            else if (pid > 0) // parent process
+            {
+                if (waitpid(pid, &status, 0) < 0)
+                {
+                    perror("waitpid() failed");
+                    exit(1);
+                }
+                dup2(STDIN_FILENO, fd_in); // restore the STDIN_FILENO fd
+                if (STDIN_FILENO != fd_in)
+                    close(fd_in);
+                break;
+            }
+        }
+    }
+    return;
+}
+
+// void handle_pipes(char **token_array, int num_pipes)
+// {
+//     pid_t pid1, pid2;
+//     int command_index = 0; // index that indicates in what position of the token array is the first word of the command for the exec
+
+//     for (int i = 0; token_array[i] != NULL; i++)
+//     {
+
+//         if (!strcmp(token_array[i], "|"))
+//         {
+//             int fd[2];
+//             if (pipe(fd) == -1)
+//             {
+//                 perror("pipe");
+//                 exit(EXIT_FAILURE);
+//             }
+
+//             // fork for process 1
+//             if ((pid1 = fork()) < 0)
+//             {
+//                 perror("fork failed");
+//                 exit(EXIT_FAILURE);
+//             }
+//             if (pid1 == 0)
+//             { // child 1
+//                 close(fd[READ]);
+//                 dup2(fd[WRITE], STDOUT_FILENO);
+//                 close(fd[WRITE]);
+
+//                 token_array[i] = NULL;
+//                 if (execvp(token_array[command_index], &token_array[command_index]) < 0)
+//                 {
+//                     perror("Error executing command");
+//                     printf("Error code: %d\n", errno);
+//                     exit(EXIT_FAILURE);
+//                 }
+//             }
+
+//             // fork for process 2
+//             if ((pid2 = fork()) < 0)
+//             {
+//                 perror("fork failed");
+//                 exit(EXIT_FAILURE);
+//             }
+//             if (pid2 == 0)
+//             { // child 2
+//                 close(fd[WRITE]);
+//                 dup2(fd[READ], STDIN_FILENO);
+//                 close(fd[READ]);
+
+//                 token_array[i] = NULL;
+//                 if (execvp(token_array[command_index], &token_array[command_index]) < 0)
+//                 {
+//                     perror("Error executing command");
+//                     printf("Error code: %d\n", errno);
+//                     exit(EXIT_FAILURE);
+//                 }
+//             }
+//         }
+//     }
+//     return;
+// }
+
+void handle_pipes(char **token_array, int num_pipes, int token_count)
+{
+    int fds[num_pipes][2];
+    pid_t pid;
+    int status;
+    null_delim(token_array);
+
+    // Creating all the pipes needed
+    for (int i = 0; i < num_pipes; i++)
+    {
+        if (pipe(fds[i]) == -1)
+        {
+            perror("pipe");
+            exit(EXIT_FAILURE);
+        }
+    }
+
+    // Forks. Kathe paidi tha klironomisei ola ta parapanw pipes
+    for (int i = 0; i <= num_pipes; i++)
+    {
+        if ((pid = fork()) < 0)
+        {
+            perror("fork failed");
+            exit(EXIT_FAILURE);
+        }
+        else if (pid == 0)
+        { // child process. Tha kanw ta aparaitita dup2 kai meta exec
+
+            if (i == 0) // stin prwti diergasia arkei na anakateuthynw mono to output. Den exw na parw input apo kapou
+                dup2(fds[0][WRITE], STDOUT_FILENO);
+            else if (i == num_pipes) // antistoixa gia tin teleutaia diergasia, anakateuthynw mono to input tou proigoumenou apo to pipe. To output de me noiazei paei kanonika stdout
+                dup2(fds[i - 1][READ], STDIN_FILENO);
+            else
+            { // diaforetika enwnw kai ta 2 akra tou pipe me to process
+                dup2(fds[i][WRITE], STDOUT_FILENO);
+                dup2(fds[i - 1][READ], STDIN_FILENO);
+            }
+
+            // afou ekana ola ta dup2, kleinw ola ta pipe ends
+            for (int j = 0; j < num_pipes; j++)
+            {
+                // if (j == i - 1){
+                //     close()
+                // }
+                // if (j == i && k == 0)
+                //     continue;
+                close(fds[j][READ]);
+                close(fds[j][WRITE]);
+            }
+
+            int index = command_to_exec(token_array, i, token_count);
+            execvp(token_array[index], &token_array[index]);
+            perror("execvp");
+            exit(EXIT_FAILURE);
+        }
+    }
+
+    // kleinw ola ta pipe ends sto parent process
+    for (int i = 0; i < num_pipes; i++)
+    {
+        close(fds[i][READ]);
+        close(fds[i][WRITE]);
+    }
+
+    for (int i = 0; i <= num_pipes; i++)
+    {
+        wait(&status);
+    }
+}
+
+int command_to_exec(char **token_array, int nth_command, int token_count)
+{
+    // epistrefei to index tou stoixeioy pou ksekinaei to command gia to exec
+    // no of command == how many nulls i must encounter
+    int null_count = 0;
+    for (int i = 0; i < token_count; i++)
+    {
+        if (null_count == nth_command)
+            return i;
+        if (token_array[i] == NULL)
+            null_count++;
+    }
+    return 0;
+}
+
+void null_delim(char **array)
+{
+    // pairnei to token array kai vazei null opou exei | kai etsi diaxwrizei tis entoles metaksy tous gia to exec meta
+    int i = 0;
+    while (array[i] != NULL)
+    {
+        if (!strcmp(array[i], "|"))
+        {
+            array[i] = NULL;
+        }
+        i++;
     }
 }

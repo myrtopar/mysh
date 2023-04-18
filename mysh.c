@@ -10,8 +10,6 @@
 
 #define MAX_CHAR_INPUT 300
 #define MAX_ARGS 30
-#define READ 0
-#define WRITE 1
 
 int main()
 {
@@ -35,6 +33,7 @@ int main()
             *ptrchr = '\0';
 
         int occ = occurences(command, '>') + occurences(command, '<') + occurences(command, '|');
+        int num_pipes = occurences(command, '|');
 
         int redirect_output_flag = if_exists(command, '>');
         int redirect_input_flag = if_exists(command, '<');
@@ -60,8 +59,9 @@ int main()
 
         // for (int i = 0; i < count; i++)
         // {
-        //     fprintf(stdout, "%s\n", token_array[i]);
+        //     fprintf(stdout, "%s ", token_array[i]);
         // }
+        // fprintf(stdout, "\n");
 
         if (!strcmp(token_array[0], "exit")) // exit shell
         {
@@ -75,8 +75,9 @@ int main()
             execute_simple_command(token_array);
         }
 
-        else if (redirect_input_flag || redirect_output_flag !pipe_flag) // handling redirections ONLY
+        else if (redirect_input_flag || redirect_output_flag || !pipe_flag) // handling redirections ONLY
         {
+            // handle_redirections(token_array);
             int fd_in, fd_out;
             pid_t pid;
             int status, exit_status;
@@ -171,7 +172,14 @@ int main()
                 }
             }
         }
+
+        else if (pipe_flag)
+        {
+            handle_pipes(token_array, num_pipes, count);
+        }
+
         free(input);
+        // end of while loop
     }
 
     return 0;
