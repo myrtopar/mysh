@@ -98,7 +98,7 @@ void handle_redirections(char **token_array)
 {
     int fd_in, fd_out;
     pid_t pid;
-    int status;
+    int status, exit_status;
 
     for (int i = 0; token_array[i] != NULL; i++)
     {
@@ -119,11 +119,12 @@ void handle_redirections(char **token_array)
             if (pid == 0) // child process
             {
                 dup2(fd_out, STDOUT_FILENO); // redirect stdout to the file opened for output
-
-                execvp(token_array[0], token_array);
-                perror("Error executing command");
-                printf("Error code: %d\n", errno);
-                exit(EXIT_FAILURE);
+                if (execvp(token_array[0], token_array) < 0)
+                {
+                    perror("Error executing command");
+                    printf("Error code: %d\n", errno);
+                    exit(EXIT_FAILURE);
+                }
             }
             else if (pid > 0) // parent process
             {
@@ -139,17 +140,13 @@ void handle_redirections(char **token_array)
                 break;
             }
         }
-
         else if (!strcmp(token_array[i], "<"))
         {
             fd_in = open(token_array[i + 1], O_RDONLY);
             token_array[i] = NULL;
 
             if ((pid = fork()) < 0)
-            {
                 perror("fork failed");
-                exit(EXIT_FAILURE);
-            }
 
             if (pid == 0) // child process
             {
@@ -170,10 +167,12 @@ void handle_redirections(char **token_array)
                     }
                 }
 
-                execvp(token_array[0], token_array);
-                perror("Error executing command");
-                printf("Error code: %d\n", errno);
-                exit(EXIT_FAILURE);
+                if (execvp(token_array[0], token_array) < 0)
+                {
+                    perror("Error executing command");
+                    printf("Error code: %d\n", errno);
+                    exit(EXIT_FAILURE);
+                }
             }
             else if (pid > 0) // parent process
             {
@@ -192,72 +191,9 @@ void handle_redirections(char **token_array)
     return;
 }
 
-// void handle_pipes(char **token_array, int num_pipes)
-// {
-//     pid_t pid1, pid2;
-//     int command_index = 0; // index that indicates in what position of the token array is the first word of the command for the exec
-
-//     for (int i = 0; token_array[i] != NULL; i++)
-//     {
-
-//         if (!strcmp(token_array[i], "|"))
-//         {
-//             int fd[2];
-//             if (pipe(fd) == -1)
-//             {
-//                 perror("pipe");
-//                 exit(EXIT_FAILURE);
-//             }
-
-//             // fork for process 1
-//             if ((pid1 = fork()) < 0)
-//             {
-//                 perror("fork failed");
-//                 exit(EXIT_FAILURE);
-//             }
-//             if (pid1 == 0)
-//             { // child 1
-//                 close(fd[READ]);
-//                 dup2(fd[WRITE], STDOUT_FILENO);
-//                 close(fd[WRITE]);
-
-//                 token_array[i] = NULL;
-//                 if (execvp(token_array[command_index], &token_array[command_index]) < 0)
-//                 {
-//                     perror("Error executing command");
-//                     printf("Error code: %d\n", errno);
-//                     exit(EXIT_FAILURE);
-//                 }
-//             }
-
-//             // fork for process 2
-//             if ((pid2 = fork()) < 0)
-//             {
-//                 perror("fork failed");
-//                 exit(EXIT_FAILURE);
-//             }
-//             if (pid2 == 0)
-//             { // child 2
-//                 close(fd[WRITE]);
-//                 dup2(fd[READ], STDIN_FILENO);
-//                 close(fd[READ]);
-
-//                 token_array[i] = NULL;
-//                 if (execvp(token_array[command_index], &token_array[command_index]) < 0)
-//                 {
-//                     perror("Error executing command");
-//                     printf("Error code: %d\n", errno);
-//                     exit(EXIT_FAILURE);
-//                 }
-//             }
-//         }
-//     }
-//     return;
-// }
-
 void handle_pipes(char **token_array, int num_pipes, int token_count)
 {
-    int fds[num_pipes][2];
+    int fds[num_pipes][2]; // 2d array, kathe grammi einai kai ena pipe, pou exei 2 ints, to write fd kai to read fd
     pid_t pid;
     int status;
     null_delim(token_array);
@@ -273,7 +209,7 @@ void handle_pipes(char **token_array, int num_pipes, int token_count)
     }
 
     // Forks. Kathe paidi tha klironomisei ola ta parapanw pipes
-    for (int i = 0; i <= num_pipes; i++)
+    for (int i = 0; i <= num_pipes; i++) //<= num_pipes giati ta processes einai kata 1 parapanw apo ta pipes
     {
         if ((pid = fork()) < 0)
         {
@@ -296,11 +232,6 @@ void handle_pipes(char **token_array, int num_pipes, int token_count)
             // afou ekana ola ta dup2, kleinw ola ta pipe ends
             for (int j = 0; j < num_pipes; j++)
             {
-                // if (j == i - 1){
-                //     close()
-                // }
-                // if (j == i && k == 0)
-                //     continue;
                 close(fds[j][READ]);
                 close(fds[j][WRITE]);
             }
