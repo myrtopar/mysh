@@ -7,9 +7,22 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <sys/stat.h>
+#include <signal.h>
 
 #define READ 0
 #define WRITE 1
+
+void interrupt_handler(int signum)
+{
+    // exiting child process...
+    exit(130);
+}
+
+struct sigaction act = {
+    .sa_handler = interrupt_handler,
+    .sa_flags = 0};
+
+// sigemptyset(&act.sa_mask);
 
 int occurences(char *str, int n)
 {
@@ -68,16 +81,29 @@ int if_exists(char *str, int n)
     return 0;
 }
 
-void execute_simple_command(char **token_array)
+void execute_simple_command(char **token_array, int background)
 {
 
-    pid_t pid;
+    pid_t pid, bg_pgid, fg_pgid;
     int status, exit_status;
+
     if ((pid = fork()) < 0)
         perror("fork failed");
 
     if (pid == 0) // child process
     {
+        if (background) // an to process einai gia background, to vazw se ena neo process group me leader ton eauto tou kai den kanw kati allo
+        {
+            bg_pgid = getpid();
+            setpgid(bg_pgid, bg_pgid);
+        }
+        else
+        { // an to process einai gia foreground, klironomei to process group tou shell. Tou dinw acess sto terminal gia na mporei na doulepsei
+            // sigaction(SIGINT, &act, NULL); // handling sigint signals
+            fg_pgid = getpid();
+            setpgid(fg_pgid, fg_pgid);
+            tcsetpgrp(STDIN_FILENO, fg_pgid);
+        }
         execvp(token_array[0], token_array);
 
         perror("Error executing command");
@@ -86,11 +112,17 @@ void execute_simple_command(char **token_array)
     }
     else if (pid > 0) // parent process
     {
-        if (waitpid(pid, &status, 0) < 0)
+        if (!background) // to parent process perimenei mono ta foreground children processes. Ta ypoloipa ta afinei na trexoun sto background
         {
-            perror("waitpid() failed");
-            exit(1);
+            if (waitpid(pid, &status, 0) < 0)
+            {
+                perror("waitpid() failed");
+                exit(1);
+            }
         }
+
+        pid_t shell_pgid = getpid();
+        tcsetpgrp(STDIN_FILENO, shell_pgid); // to shell pairnei pali ton elegxo tou controlling terminal kai synexizei na diavazei input
     }
 }
 
@@ -118,6 +150,8 @@ void handle_redirections(char **token_array)
 
             if (pid == 0) // child process
             {
+                sigaction(SIGINT, &act, NULL); // handling sigint signals
+
                 dup2(fd_out, STDOUT_FILENO); // redirect stdout to the file opened for output
                 if (execvp(token_array[0], token_array) < 0)
                 {
@@ -150,6 +184,7 @@ void handle_redirections(char **token_array)
 
             if (pid == 0) // child process
             {
+                sigaction(SIGINT, &act, NULL); // handling sigint signals
 
                 dup2(fd_in, STDIN_FILENO); // redirect stdin to the file opened for input
 
@@ -217,7 +252,8 @@ void handle_pipes(char **token_array, int num_pipes, int token_count)
             exit(EXIT_FAILURE);
         }
         else if (pid == 0)
-        { // child process. Tha kanw ta aparaitita dup2 kai meta exec
+        {                                  // child process. Tha kanw ta aparaitita dup2 kai meta exec
+            sigaction(SIGINT, &act, NULL); // handling sigint signals
 
             if (i == 0) // stin prwti diergasia arkei na anakateuthynw mono to output. Den exw na parw input apo kapou
                 dup2(fds[0][WRITE], STDOUT_FILENO);
