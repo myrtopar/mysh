@@ -108,7 +108,7 @@ int main()
 
         else if (redirect_input_flag || redirect_output_flag || !pipe_flag) // handling redirections ONLY
         {
-            handle_redirections(token_array);
+            handle_redirections(token_array, bg_flag);
         }
 
         else if (pipe_flag)

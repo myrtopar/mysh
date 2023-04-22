@@ -3,9 +3,8 @@
 
 int main()
 {
-
     sleep(10);
-    printf("inf2 after 10 seconds\n");
+    printf("inf1 after 10 seconds lalalalala\n");
 
     return 0;
 }

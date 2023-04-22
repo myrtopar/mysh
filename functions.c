@@ -104,6 +104,7 @@ void execute_simple_command(char **token_array, int background)
             setpgid(fg_pgid, fg_pgid);
             tcsetpgrp(STDIN_FILENO, fg_pgid);
         }
+
         execvp(token_array[0], token_array);
 
         perror("Error executing command");
@@ -114,11 +115,11 @@ void execute_simple_command(char **token_array, int background)
     {
         if (!background) // to parent process perimenei mono ta foreground children processes. Ta ypoloipa ta afinei na trexoun sto background
         {
-            if (waitpid(pid, &status, 0) < 0)
-            {
-                perror("waitpid() failed");
-                exit(1);
-            }
+            // printf("pid: %d, fgpgid: %d\n", pid, fg_pgid);
+            int waitval = waitpid(-1, &status, 0);
+            // printf("waitval: %d\n", waitval);
+            // if (errno == ECHILD)
+            //     printf("echild errno\n");
         }
 
         pid_t shell_pgid = getpid();
@@ -126,10 +127,10 @@ void execute_simple_command(char **token_array, int background)
     }
 }
 
-void handle_redirections(char **token_array)
+void handle_redirections(char **token_array, int background)
 {
     int fd_in, fd_out;
-    pid_t pid;
+    pid_t pid, bg_pgid, fg_pgid;
     int status, exit_status;
 
     for (int i = 0; token_array[i] != NULL; i++)
@@ -150,26 +151,43 @@ void handle_redirections(char **token_array)
 
             if (pid == 0) // child process
             {
-                sigaction(SIGINT, &act, NULL); // handling sigint signals
+
+                if (background) // an to process einai gia background, to vazw se ena neo process group me leader ton eauto tou kai den kanw kati allo
+                {
+                    bg_pgid = getpid();
+                    setpgid(bg_pgid, bg_pgid);
+                }
+                else
+                { // an to process einai gia foreground, klironomei to process group tou shell. Tou dinw acess sto terminal gia na mporei na doulepsei
+                    fg_pgid = getpid();
+                    setpgid(fg_pgid, fg_pgid);
+                    tcsetpgrp(STDIN_FILENO, fg_pgid);
+                }
+                // sigaction(SIGINT, &act, NULL); // handling sigint signals
 
                 dup2(fd_out, STDOUT_FILENO); // redirect stdout to the file opened for output
-                if (execvp(token_array[0], token_array) < 0)
-                {
-                    perror("Error executing command");
-                    printf("Error code: %d\n", errno);
-                    exit(EXIT_FAILURE);
-                }
+                execvp(token_array[0], token_array);
+
+                perror("Error executing command");
+                printf("Error code: %d\n", errno);
+                exit(EXIT_FAILURE);
             }
             else if (pid > 0) // parent process
             {
-                if (waitpid(pid, &status, 0) < 0)
+                if (!background) // to parent process perimenei mono ta foreground children processes. Ta ypoloipa ta afinei na trexoun sto background
                 {
-                    perror("waitpid() failed");
-                    exit(1);
+                    int waitval = waitpid(-1, &status, 0);
+                    printf("waitval: %d\n", waitval);
+                    // if (errno == ECHILD)
+                    //     printf("echild errno\n");
                 }
+
                 dup2(STDOUT_FILENO, fd_out); // restore the STDOUT_FILENO fd
                 if (STDOUT_FILENO != fd_out)
                     close(fd_out);
+
+                pid_t shell_pgid = getpid();
+                tcsetpgrp(STDIN_FILENO, shell_pgid); // to shell pairnei pali ton elegxo tou controlling terminal kai synexizei na diavazei input
 
                 break;
             }
@@ -184,7 +202,19 @@ void handle_redirections(char **token_array)
 
             if (pid == 0) // child process
             {
-                sigaction(SIGINT, &act, NULL); // handling sigint signals
+                // sigaction(SIGINT, &act, NULL); // handling sigint signals
+
+                if (background) // an to process einai gia background, to vazw se ena neo process group me leader ton eauto tou kai den kanw kati allo
+                {
+                    bg_pgid = getpid();
+                    setpgid(bg_pgid, bg_pgid);
+                }
+                else
+                { // an to process einai gia foreground, klironomei to process group tou shell. Tou dinw acess sto terminal gia na mporei na doulepsei
+                    fg_pgid = getpid();
+                    setpgid(fg_pgid, fg_pgid);
+                    tcsetpgrp(STDIN_FILENO, fg_pgid);
+                }
 
                 dup2(fd_in, STDIN_FILENO); // redirect stdin to the file opened for input
 
@@ -202,23 +232,28 @@ void handle_redirections(char **token_array)
                     }
                 }
 
-                if (execvp(token_array[0], token_array) < 0)
-                {
-                    perror("Error executing command");
-                    printf("Error code: %d\n", errno);
-                    exit(EXIT_FAILURE);
-                }
+                execvp(token_array[0], token_array);
+                perror("Error executing command");
+                printf("Error code: %d\n", errno);
+                exit(EXIT_FAILURE);
             }
             else if (pid > 0) // parent process
             {
-                if (waitpid(pid, &status, 0) < 0)
+                if (!background) // to parent process perimenei mono ta foreground children processes. Ta ypoloipa ta afinei na trexoun sto background
                 {
-                    perror("waitpid() failed");
-                    exit(1);
+                    int waitval = waitpid(-1, &status, 0);
+                    printf("waitval: %d\n", waitval);
+                    // if (errno == ECHILD)
+                    //     printf("echild errno\n");
                 }
+
                 dup2(STDIN_FILENO, fd_in); // restore the STDIN_FILENO fd
                 if (STDIN_FILENO != fd_in)
                     close(fd_in);
+
+                pid_t shell_pgid = getpid();
+                tcsetpgrp(STDIN_FILENO, shell_pgid); // to shell pairnei pali ton elegxo tou controlling terminal kai synexizei na diavazei input
+
                 break;
             }
         }
