@@ -8,6 +8,7 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <signal.h>
+#include <ctype.h>
 
 #define READ 0
 #define WRITE 1
@@ -15,14 +16,20 @@
 void interrupt_handler(int signum)
 {
     // exiting child process...
+    printf("about to terminate...\n");
+    exit(130);
+}
+
+void suspend_handler(int signum)
+{
+    // suspending child process...
+    printf("about to suspend...\n");
     exit(130);
 }
 
 struct sigaction act = {
     .sa_handler = interrupt_handler,
     .sa_flags = 0};
-
-// sigemptyset(&act.sa_mask);
 
 int occurences(char *str, int n)
 {
@@ -61,6 +68,10 @@ char *add_whitespaces(char *str, int occur)
             with_whitespaces[index++] = *str;
             with_whitespaces[index++] = ' ';
         }
+        else if (*str == '&')
+        {
+            with_whitespaces[index++] = ' ';
+        }
         else
             with_whitespaces[index++] = *str;
 
@@ -81,6 +92,24 @@ int if_exists(char *str, int n)
     return 0;
 }
 
+void parse_command(char *input, char *token_array[])
+{
+    // to token_array exei ta tokens tou input spasmena: px gia entolh input ls -al: token_array[0] = ls, token_array[1] = -al
+
+    int count = 0;
+    char *token = strtok(input, " \t");
+    while (token != NULL)
+    {
+        token_array[count] = token;
+        count++;
+        token = strtok(NULL, " \t");
+    }
+
+    token_array[count] = NULL;
+
+    return;
+}
+
 void execute_simple_command(char **token_array, int background)
 {
 
@@ -98,8 +127,9 @@ void execute_simple_command(char **token_array, int background)
             setpgid(bg_pgid, bg_pgid);
         }
         else
-        { // an to process einai gia foreground, klironomei to process group tou shell. Tou dinw acess sto terminal gia na mporei na doulepsei
-            // sigaction(SIGINT, &act, NULL); // handling sigint signals
+        {                             // an to process einai gia foreground, klironomei to process group tou shell. Tou dinw acess sto terminal gia na mporei na doulepsei
+            signal(SIGINT, SIG_DFL);  // handling sigint signals (ctrl-c)
+            signal(SIGTSTP, SIG_DFL); // handling sigtstp signals (ctrl-z)
             fg_pgid = getpid();
             setpgid(fg_pgid, fg_pgid);
             tcsetpgrp(STDIN_FILENO, fg_pgid);
@@ -115,12 +145,17 @@ void execute_simple_command(char **token_array, int background)
     {
         if (!background) // to parent process perimenei mono ta foreground children processes. Ta ypoloipa ta afinei na trexoun sto background
         {
-            // printf("pid: %d, fgpgid: %d\n", pid, fg_pgid);
             int waitval = waitpid(-1, &status, 0);
-            // printf("waitval: %d\n", waitval);
-            // if (errno == ECHILD)
-            //     printf("echild errno\n");
         }
+        // else if (background)
+        // {
+        //     printf("Done              ");
+        //     for (int i = 0; token_array[i] != NULL; i++)
+        //     {
+        //         fprintf(stdout, "%s ", token_array[i]);
+        //     }
+        //     fprintf(stdout, "\n");
+        // }
 
         pid_t shell_pgid = getpid();
         tcsetpgrp(STDIN_FILENO, shell_pgid); // to shell pairnei pali ton elegxo tou controlling terminal kai synexizei na diavazei input
@@ -158,12 +193,12 @@ void handle_redirections(char **token_array, int background)
                     setpgid(bg_pgid, bg_pgid);
                 }
                 else
-                { // an to process einai gia foreground, klironomei to process group tou shell. Tou dinw acess sto terminal gia na mporei na doulepsei
+                {                                  // an to process einai gia foreground, klironomei to process group tou shell. Tou dinw acess sto terminal gia na mporei na doulepsei
+                    sigaction(SIGINT, &act, NULL); // handling sigint signals
                     fg_pgid = getpid();
                     setpgid(fg_pgid, fg_pgid);
                     tcsetpgrp(STDIN_FILENO, fg_pgid);
                 }
-                // sigaction(SIGINT, &act, NULL); // handling sigint signals
 
                 dup2(fd_out, STDOUT_FILENO); // redirect stdout to the file opened for output
                 execvp(token_array[0], token_array);
@@ -177,9 +212,6 @@ void handle_redirections(char **token_array, int background)
                 if (!background) // to parent process perimenei mono ta foreground children processes. Ta ypoloipa ta afinei na trexoun sto background
                 {
                     int waitval = waitpid(-1, &status, 0);
-                    printf("waitval: %d\n", waitval);
-                    // if (errno == ECHILD)
-                    //     printf("echild errno\n");
                 }
 
                 dup2(STDOUT_FILENO, fd_out); // restore the STDOUT_FILENO fd
@@ -202,7 +234,6 @@ void handle_redirections(char **token_array, int background)
 
             if (pid == 0) // child process
             {
-                // sigaction(SIGINT, &act, NULL); // handling sigint signals
 
                 if (background) // an to process einai gia background, to vazw se ena neo process group me leader ton eauto tou kai den kanw kati allo
                 {
@@ -210,7 +241,8 @@ void handle_redirections(char **token_array, int background)
                     setpgid(bg_pgid, bg_pgid);
                 }
                 else
-                { // an to process einai gia foreground, klironomei to process group tou shell. Tou dinw acess sto terminal gia na mporei na doulepsei
+                {                                  // an to process einai gia foreground, klironomei to process group tou shell. Tou dinw acess sto terminal gia na mporei na doulepsei
+                    sigaction(SIGINT, &act, NULL); // handling sigint signals
                     fg_pgid = getpid();
                     setpgid(fg_pgid, fg_pgid);
                     tcsetpgrp(STDIN_FILENO, fg_pgid);
@@ -242,9 +274,6 @@ void handle_redirections(char **token_array, int background)
                 if (!background) // to parent process perimenei mono ta foreground children processes. Ta ypoloipa ta afinei na trexoun sto background
                 {
                     int waitval = waitpid(-1, &status, 0);
-                    printf("waitval: %d\n", waitval);
-                    // if (errno == ECHILD)
-                    //     printf("echild errno\n");
                 }
 
                 dup2(STDIN_FILENO, fd_in); // restore the STDIN_FILENO fd
@@ -261,10 +290,10 @@ void handle_redirections(char **token_array, int background)
     return;
 }
 
-void handle_pipes(char **token_array, int num_pipes, int token_count)
+void handle_pipes(char **token_array, int num_pipes, int token_count, int background)
 {
     int fds[num_pipes][2]; // 2d array, kathe grammi einai kai ena pipe, pou exei 2 ints, to write fd kai to read fd
-    pid_t pid;
+    pid_t pid, bg_pgid, fg_pgid;
     int status;
     null_delim(token_array);
 
@@ -278,6 +307,7 @@ void handle_pipes(char **token_array, int num_pipes, int token_count)
         }
     }
 
+    pid_t leader_fgid, leader_bgid;
     // Forks. Kathe paidi tha klironomisei ola ta parapanw pipes
     for (int i = 0; i <= num_pipes; i++) //<= num_pipes giati ta processes einai kata 1 parapanw apo ta pipes
     {
@@ -287,8 +317,35 @@ void handle_pipes(char **token_array, int num_pipes, int token_count)
             exit(EXIT_FAILURE);
         }
         else if (pid == 0)
-        {                                  // child process. Tha kanw ta aparaitita dup2 kai meta exec
-            sigaction(SIGINT, &act, NULL); // handling sigint signals
+        { // child process. Tha kanw ta aparaitita dup2 kai meta exec
+            // sigaction(SIGINT, &act, NULL); // handling sigint signals
+
+            if (background)
+            {
+                if (i == 0)
+                { // ean einai to prwto process, tha ftiaksei ena process group kai tha thesei ton eauto tou ws leader process
+                    bg_pgid = getpid();
+                    setpgid(bg_pgid, bg_pgid);
+                }
+                else if (i > 0)
+                { // ean den einai to prwto process tou pipeline, tote apla to vazw sto process group tou
+                    setpgid(getpid(), leader_bgid);
+                }
+            }
+            else if (!background)
+            {
+                if (i == 0)
+                { // ean einai to prwto process, tha ftiaksei ena process group kai tha thesei ton eauto tou ws leader process
+                    fg_pgid = getpid();
+                    setpgid(fg_pgid, fg_pgid);
+                    tcsetpgrp(STDIN_FILENO, fg_pgid);
+                }
+                else if (i > 0)
+                { // ean den einai to prwto process tou pipeline, tote apla to vazw sto process group tou
+                    setpgid(getpid(), leader_fgid);
+                    tcsetpgrp(STDIN_FILENO, leader_fgid);
+                }
+            }
 
             if (i == 0) // stin prwti diergasia arkei na anakateuthynw mono to output. Den exw na parw input apo kapou
                 dup2(fds[0][WRITE], STDOUT_FILENO);
@@ -312,6 +369,12 @@ void handle_pipes(char **token_array, int num_pipes, int token_count)
             perror("execvp");
             exit(EXIT_FAILURE);
         }
+
+        if (i == 0)
+        {
+            leader_bgid = pid; // to PRWTO pid sto parent process einai to process leader tou process group
+            leader_fgid = pid;
+        }
     }
 
     // kleinw ola ta pipe ends sto parent process
@@ -321,10 +384,16 @@ void handle_pipes(char **token_array, int num_pipes, int token_count)
         close(fds[i][WRITE]);
     }
 
-    for (int i = 0; i <= num_pipes; i++)
+    if (!background) // to parent process perimenei mono ta foreground children processes. Ta ypoloipa ta afinei na trexoun sto background
     {
-        wait(&status);
+        for (int i = 0; i <= num_pipes; i++)
+        {
+            int waitval = waitpid(-1, &status, 0);
+        }
     }
+
+    pid_t shell_pgid = getpid();
+    tcsetpgrp(STDIN_FILENO, shell_pgid); // to shell pairnei pali ton elegxo tou controlling terminal kai synexizei na diavazei input
 }
 
 int command_to_exec(char **token_array, int nth_command, int token_count)
@@ -354,4 +423,38 @@ void null_delim(char **array)
         }
         i++;
     }
+}
+
+void show_history(char **history, int nth)
+{
+    for (int i = 0; i < 20; i++)
+    {
+        fprintf(stdout, "%s\n", history[i]);
+        if (i > nth - 1)
+            break;
+    }
+}
+
+int isDigit(char *str)
+{
+    int i = 0;
+
+    for (; str[i] != '\0'; i++)
+    {
+        if (!isdigit(str[i]))
+        {
+            return 0;
+        }
+    }
+
+    return 1;
+}
+
+int token_count(char *token_array[])
+{
+    int count = 0;
+    while (token_array[count] != NULL)
+        count++;
+
+    return count;
 }

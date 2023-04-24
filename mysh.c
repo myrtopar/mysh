@@ -12,11 +12,15 @@
 #define MAX_CHAR_INPUT 300
 #define MAX_ARGS 30
 
+#define COLOR_RED "\x1b[95m"
+#define COLOR_RESET "\x1b[0m"
+#define BOLD "\x1b[1m"
+
 int main()
 {
     signal(SIGINT, SIG_IGN);
     signal(SIGQUIT, SIG_IGN);
-    signal(SIGTSTP, SIG_IGN);
+    // signal(SIGTSTP, SIG_IGN);
     signal(SIGTTIN, SIG_IGN);
     signal(SIGTTOU, SIG_IGN);
     signal(SIGCHLD, SIG_IGN);
@@ -29,17 +33,20 @@ int main()
     }
     tcsetpgrp(STDIN_FILENO, shell_pgid);
 
-    signal(SIGINT, SIG_DFL);
-    // signal(SIGTSTP, SIG_DFL);
-
     char command[MAX_CHAR_INPUT]; //= malloc(MAX_CHAR_INPUT);
-    char history[20][MAX_CHAR_INPUT];
     char *token_array[MAX_ARGS];
-    int count = 0;
+
+    int nth_command = 0; // n-osth entolh sto mysh
+
+    char **history_array = (char **)malloc(20 * sizeof(char *));
+    for (int i = 0; i < 20; i++)
+    {
+        history_array[i] = (char *)malloc(MAX_CHAR_INPUT * sizeof(char));
+    }
 
     while (1)
     {
-        printf("in-mysh-now:> ");
+        printf(COLOR_RED BOLD "mysh> " COLOR_RESET);
         fflush(stdout);
 
         fgets(command, MAX_CHAR_INPUT, stdin);
@@ -61,38 +68,25 @@ int main()
 
         char *input = add_whitespaces(command, occ);
 
-        // parse me strtok to input pou pira me tin fgets
-        // to token_array exei ta tokens tou input spasmena: px gia entolh input ls -al: token_array[0] = ls, token_array[1] = -al
-        int count = 0;
-        char *token = strtok(input, " \t");
-        while (token != NULL)
-        {
-            token_array[count] = token;
-            count++;
-            token = strtok(NULL, " \t");
-        }
+        // copy to command sto history
+        int index = nth_command % 20;
+        strcpy(history_array[index], input);
+        nth_command++;
+
+        parse_command(input, token_array);
+        int count = token_count(token_array);
 
         if (count == 0) // αν η γραμμη δεν εχει κανενα token, προχώρα
             continue;
 
-        token_array[count++] = NULL;
-
-        // an to command exei ampersant sto telos, vazw sti thesi tou & NULL gia na ektelestei kanonika i entoli.
-        int i = 0;
-        while (token_array[i] != NULL)
+        if (!strcmp(token_array[0], "myhistory") && token_array[1] == NULL)
         {
-            if (!strcmp(token_array[i], "&"))
-            {
-                token_array[i] = NULL;
-            }
-            i++;
+            show_history(history_array, nth_command);
+            continue;
         }
-
-        // for (int i = 0; i < count; i++)
-        // {
-        //     fprintf(stdout, "%s ", token_array[i]);
-        // }
-        // fprintf(stdout, "\n");
+        else if (!strcmp(token_array[0], "myhistory") && isDigit(token_array[1]))
+        {
+        }
 
         if (!strcmp(token_array[0], "exit")) // exit shell
         {
@@ -113,7 +107,7 @@ int main()
 
         else if (pipe_flag)
         {
-            handle_pipes(token_array, num_pipes, count);
+            handle_pipes(token_array, num_pipes, count, bg_flag);
         }
 
         free(input);
