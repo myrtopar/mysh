@@ -23,8 +23,10 @@ void interrupt_handler(int signum)
 void suspend_handler(int signum)
 {
     // suspending child process...
+    signal(SIGTSTP, SIG_DFL);
+    pid_t pgid = getpgrp();
     printf("about to suspend...\n");
-    exit(130);
+    killpg(pgid, SIGSTOP); // Suspend the child process group
 }
 
 struct sigaction act = {
@@ -68,7 +70,7 @@ char *add_whitespaces(char *str, int occur)
             with_whitespaces[index++] = *str;
             with_whitespaces[index++] = ' ';
         }
-        else if (*str == '&')
+        else if (*str == '&' || *str == '"')
         {
             with_whitespaces[index++] = ' ';
         }
@@ -121,15 +123,16 @@ void execute_simple_command(char **token_array, int background)
 
     if (pid == 0) // child process
     {
-        if (background) // an to process einai gia background, to vazw se ena neo process group me leader ton eauto tou kai den kanw kati allo
+        if (background == 1) // an to process einai gia background, to vazw se ena neo process group me leader ton eauto tou kai den kanw kati allo
         {
             bg_pgid = getpid();
             setpgid(bg_pgid, bg_pgid);
         }
-        else
-        {                             // an to process einai gia foreground, klironomei to process group tou shell. Tou dinw acess sto terminal gia na mporei na doulepsei
-            signal(SIGINT, SIG_DFL);  // handling sigint signals (ctrl-c)
-            signal(SIGTSTP, SIG_DFL); // handling sigtstp signals (ctrl-z)
+        else if (background == 0)
+        {
+            // an to process einai gia foreground, klironomei to process group tou shell. Tou dinw acess sto terminal gia na mporei na doulepsei
+            signal(SIGINT, SIG_DFL);          // handling sigint signals (ctrl-c)
+            signal(SIGTSTP, suspend_handler); // handling sigtstp signals (ctrl-z)
             fg_pgid = getpid();
             setpgid(fg_pgid, fg_pgid);
             tcsetpgrp(STDIN_FILENO, fg_pgid);
@@ -457,4 +460,51 @@ int token_count(char *token_array[])
         count++;
 
     return count;
+}
+
+aliasnode *search_alias(aliasnode **alias_array, char *alias)
+{
+    for (int i = 0; i < 30; i++)
+    {
+        if (alias_array[i] != NULL)
+        {
+            if (!strcmp(alias_array[i]->alias, alias))
+            {
+                return alias_array[i];
+            }
+        }
+    }
+
+    return NULL;
+}
+
+int createalias(aliasnode **alias_array, char *token_array[])
+{
+    if (search_alias(alias_array, token_array[1]) != NULL) // yparxei idi kapoio command me auto to alias
+        return 0;
+
+    aliasnode *new_alias = (aliasnode *)malloc(sizeof(struct aliasnode));
+    strcpy(new_alias->alias, token_array[1]);
+
+    char *command = (char *)malloc(100 * sizeof(char));
+
+    int i = 2;
+    while (token_array[i] != NULL)
+    {
+        command = strcat(command, token_array[i]);
+        command = strcat(command, " ");
+        i++;
+    }
+    strcpy(new_alias->command, command);
+    free(command);
+
+    int j = 0;
+    while (alias_array[j] != NULL)
+        j++;
+
+    // printf("placing alias struct with alias: %s and command: %s in place %d\n", new_alias->alias, new_alias->command, j);
+    // placing the struct in the first available position in the array of aliases
+    alias_array[j] = new_alias;
+
+    return 1;
 }

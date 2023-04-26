@@ -20,7 +20,7 @@ int main()
 {
     signal(SIGINT, SIG_IGN);
     signal(SIGQUIT, SIG_IGN);
-    // signal(SIGTSTP, SIG_IGN);
+    signal(SIGTSTP, SIG_IGN);
     signal(SIGTTIN, SIG_IGN);
     signal(SIGTTOU, SIG_IGN);
     signal(SIGCHLD, SIG_IGN);
@@ -35,9 +35,13 @@ int main()
 
     char command[MAX_CHAR_INPUT]; //= malloc(MAX_CHAR_INPUT);
     char *token_array[MAX_ARGS];
+    aliasnode *alias_array[30]; // static array of 30 aliasptr pointers
+    for (int i = 0; i < 30; i++)
+    {
+        alias_array[i] = NULL;
+    }
 
     int nth_command = 0; // n-osth entolh sto mysh
-
     char **history_array = (char **)malloc(20 * sizeof(char *));
     for (int i = 0; i < 20; i++)
     {
@@ -84,8 +88,36 @@ int main()
             show_history(history_array, nth_command);
             continue;
         }
+
         else if (!strcmp(token_array[0], "myhistory") && isDigit(token_array[1]))
         {
+            // ektelei tin n-osti entoli APO TO TELOS!
+            int num = atoi(token_array[1]);
+            if (num > 20 || num == 0)
+            {
+                printf("Invalid number\n");
+                continue;
+            }
+            char *nth = history_array[index - num];
+            parse_command(nth, token_array);
+            count = token_count(token_array);
+        }
+        // for (int i = 0; i < count; i++)
+        // {
+        //     printf("%s\n", token_array[i]);
+        // }
+
+        // for (int i = 0; i < 30; i++)
+        // {
+        //     if (alias_array[i] != NULL)
+        //         printf("%d alias: %s, command: %s\n", i, alias_array[i]->alias, alias_array[i]->command);
+        // }
+
+        if (!strcmp(token_array[0], "createalias"))
+        {
+            if (createalias(alias_array, token_array) == 0)
+                printf("Error creating alias. This alias already exists.\n");
+            continue;
         }
 
         if (!strcmp(token_array[0], "exit")) // exit shell
@@ -93,6 +125,17 @@ int main()
             printf("logout\n");
             fflush(stdout);
             break;
+        }
+        aliasnode *alias = search_alias(alias_array, token_array[0]);
+        if (alias != NULL)
+        {
+            redirect_output_flag = if_exists(alias->command, '>');
+            redirect_input_flag = if_exists(alias->command, '<');
+            pipe_flag = if_exists(alias->command, '|');
+            bg_flag = if_exists(alias->command, '&');
+
+            parse_command(alias->command, token_array);
+            count = token_count(token_array);
         }
 
         if (!redirect_input_flag && !redirect_output_flag && !pipe_flag) // executing simple commands
@@ -113,6 +156,11 @@ int main()
         free(input);
         // end of while loop
     }
+
+    for (int i = 0; i < 20; i++)
+        free(history_array[i]);
+
+    free(history_array);
 
     return 0;
 }
