@@ -1,20 +1,4 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-#include <sys/wait.h>
-#include <errno.h>
-#include <fcntl.h>
-#include <sys/stat.h>
-#include <signal.h>
 #include "functions.h"
-
-#define MAX_CHAR_INPUT 300
-#define MAX_ARGS 30
-
-#define COLOR_RED "\x1b[95m"
-#define COLOR_RESET "\x1b[0m"
-#define BOLD "\x1b[1m"
 
 int main()
 {
@@ -33,7 +17,7 @@ int main()
     }
     tcsetpgrp(STDIN_FILENO, shell_pgid);
 
-    char command[MAX_CHAR_INPUT]; //= malloc(MAX_CHAR_INPUT);
+    char command[MAX_CHAR_INPUT];
     char *token_array[MAX_ARGS];
     aliasnode *alias_array[30]; // static array of 30 aliasptr pointers
     for (int i = 0; i < 30; i++)
@@ -69,6 +53,7 @@ int main()
         int redirect_input_flag = if_exists(command, '<');
         int pipe_flag = if_exists(command, '|');
         int bg_flag = if_exists(command, '&');
+        int asterisk_flag = if_exists(command, '*');
 
         char *input = add_whitespaces(command, occ);
 
@@ -81,7 +66,9 @@ int main()
         int count = token_count(token_array);
 
         if (count == 0) // αν η γραμμη δεν εχει κανενα token, προχώρα
+        {
             continue;
+        }
 
         if (!strcmp(token_array[0], "myhistory") && token_array[1] == NULL)
         {
@@ -102,23 +89,6 @@ int main()
             parse_command(nth, token_array);
             count = token_count(token_array);
         }
-        // for (int i = 0; i < count; i++)
-        // {
-        //     printf("%s\n", token_array[i]);
-        // }
-
-        // for (int i = 0; i < 30; i++)
-        // {
-        //     if (alias_array[i] != NULL)
-        //         printf("%d alias: %s, command: %s\n", i, alias_array[i]->alias, alias_array[i]->command);
-        // }
-
-        if (!strcmp(token_array[0], "createalias"))
-        {
-            if (createalias(alias_array, token_array) == 0)
-                printf("Error creating alias. This alias already exists.\n");
-            continue;
-        }
 
         if (!strcmp(token_array[0], "exit")) // exit shell
         {
@@ -126,6 +96,19 @@ int main()
             fflush(stdout);
             break;
         }
+
+        if (!strcmp(token_array[0], "createalias"))
+        {
+            if (createalias(alias_array, token_array) == 0)
+                printf("Error creating alias. This alias already exists.\n");
+            continue;
+        }
+        else if (!strcmp(token_array[0], "destroyalias"))
+        {
+            destroyalias(alias_array, token_array[1]);
+        }
+
+        // elegxos an i entoli pou dothike einai alias i oxi
         aliasnode *alias = search_alias(alias_array, token_array[0]);
         if (alias != NULL)
         {
@@ -136,6 +119,13 @@ int main()
 
             parse_command(alias->command, token_array);
             count = token_count(token_array);
+        }
+
+        if (asterisk_flag)
+        {
+
+            expand_asterisk(token_array, redirect_input_flag, redirect_output_flag, pipe_flag, bg_flag);
+            continue;
         }
 
         if (!redirect_input_flag && !redirect_output_flag && !pipe_flag) // executing simple commands

@@ -1,3 +1,22 @@
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+#include <unistd.h>
+#include <sys/wait.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <signal.h>
+#include <glob.h>
+#include <ctype.h>
+
+#define MAX_CHAR_INPUT 300
+#define MAX_ARGS 50
+
+#define COLOR_RED "\x1b[95m"
+#define COLOR_RESET "\x1b[0m"
+#define BOLD "\x1b[1m"
+
 // struct που περιεχει πληροφοριες για ενα alias kai to command που αντιπροσωπευει
 typedef struct aliasnode aliasnode;
 struct aliasnode
@@ -20,3 +39,5 @@ int isDigit(char *);
 int token_count(char **);
 int createalias(aliasnode **, char **);
 aliasnode *search_alias(aliasnode **, char *);
+void destroyalias(aliasnode **, char *);
+void expand_asterisk(char **, int, int, int, int);
