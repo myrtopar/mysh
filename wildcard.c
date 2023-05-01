@@ -1,8 +1,7 @@
 #include "functions.h"
 
-void expand_asterisk(char **token_array, int in_redirect, int out_redirect, int pipe, int bg)
+void expand_asterisk(char **token_array, int in_redirect, int out_redirect, int pipe, int num_pipes, int bg)
 {
-    printf("in expand asterisk\n");
     char *expanded_token_array[MAX_ARGS];
     int i = 0, j = 0;
     glob_t files;
@@ -10,7 +9,7 @@ void expand_asterisk(char **token_array, int in_redirect, int out_redirect, int 
 
     while (token_array[i] != NULL)
     {
-        if (if_exists(token_array[i], '*'))
+        if (if_exists(token_array[i], '*') || if_exists(token_array[i], '?'))
         {
             if ((res = glob(token_array[i], 0, NULL, &files)) == 0)
             {
@@ -22,16 +21,32 @@ void expand_asterisk(char **token_array, int in_redirect, int out_redirect, int 
         }
         else
         {
-            printf("%s, %d\n", token_array[i], j);
             expanded_token_array[j++] = token_array[i];
         }
         i++;
     }
+
     expanded_token_array[j] = NULL;
 
-    int m = 0;
-    while (expanded_token_array[m] != NULL)
-        printf("%s\n", expanded_token_array[m++]);
+    // int m = 0;
+    // while (expanded_token_array[m] != NULL)
+    //     printf("%s\n", expanded_token_array[m++]);
+    int count = token_count(expanded_token_array);
+
+    if (!in_redirect && !out_redirect && !pipe) // executing simple commands
+    {
+        execute_simple_command(expanded_token_array, bg);
+    }
+
+    else if (in_redirect || out_redirect || !pipe) // handling redirections ONLY
+    {
+        handle_redirections(expanded_token_array, bg);
+    }
+
+    else if (pipe)
+    {
+        handle_pipes(expanded_token_array, num_pipes, count, bg, out_redirect);
+    }
 
     globfree(&files);
 }

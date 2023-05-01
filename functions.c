@@ -50,6 +50,14 @@ char *add_whitespaces(char *str, int occur)
             with_whitespaces[index++] = *str;
             with_whitespaces[index++] = ' ';
         }
+        else if (*str == '>' && *(str + 1) != '>' && *(str - 1) != '>')
+        {
+            with_whitespaces[index++] = ' ';
+            with_whitespaces[index++] = *str;
+            with_whitespaces[index++] = ' ';
+        }
+
+        // subcases for append operator >> so that whitespaces can wrap around >> operator
         else if (*str == '>' && *(str + 1) == '>')
         {
             with_whitespaces[index++] = ' ';
@@ -89,7 +97,9 @@ void parse_command(char *input, char *token_array[])
     // to token_array exei ta tokens tou input spasmena: px gia entolh input ls -al: token_array[0] = ls, token_array[1] = -al
 
     int count = 0;
-    char *token = strtok(input, " \t");
+    char *input_dup = strdup(input);
+
+    char *token = strtok(input_dup, " \t");
     while (token != NULL)
     {
         token_array[count] = token;
@@ -98,7 +108,6 @@ void parse_command(char *input, char *token_array[])
     }
 
     token_array[count] = NULL;
-
     return;
 }
 
@@ -131,7 +140,6 @@ void execute_simple_command(char **token_array, int background)
         execvp(token_array[0], token_array);
 
         perror("Error executing command");
-        printf("Error code: %d\n", errno);
         exit(EXIT_FAILURE);
     }
     else if (pid > 0) // parent process
@@ -197,7 +205,6 @@ void handle_redirections(char **token_array, int background)
                 execvp(token_array[0], token_array);
 
                 perror("Error executing command");
-                printf("Error code: %d\n", errno);
                 exit(EXIT_FAILURE);
             }
             else if (pid > 0) // parent process
@@ -259,7 +266,6 @@ void handle_redirections(char **token_array, int background)
 
                 execvp(token_array[0], token_array);
                 perror("Error executing command");
-                printf("Error code: %d\n", errno);
                 exit(EXIT_FAILURE);
             }
             else if (pid > 0) // parent process
@@ -283,7 +289,7 @@ void handle_redirections(char **token_array, int background)
     return;
 }
 
-void handle_pipes(char **token_array, int num_pipes, int token_count, int background)
+void handle_pipes(char **token_array, int num_pipes, int token_count, int background, int redirect)
 {
     int fds[num_pipes][2]; // 2d array, kathe grammi einai kai ena pipe, pou exei 2 ints, to write fd kai to read fd
     pid_t pid, bg_pgid, fg_pgid;
@@ -311,7 +317,6 @@ void handle_pipes(char **token_array, int num_pipes, int token_count, int backgr
         }
         else if (pid == 0)
         { // child process. Tha kanw ta aparaitita dup2 kai meta exec
-            // sigaction(SIGINT, &act, NULL); // handling sigint signals
 
             if (background)
             {
@@ -342,8 +347,26 @@ void handle_pipes(char **token_array, int num_pipes, int token_count, int backgr
 
             if (i == 0) // stin prwti diergasia arkei na anakateuthynw mono to output. Den exw na parw input apo kapou
                 dup2(fds[0][WRITE], STDOUT_FILENO);
+
             else if (i == num_pipes) // antistoixa gia tin teleutaia diergasia, anakateuthynw mono to input tou proigoumenou apo to pipe. To output de me noiazei paei kanonika stdout
+            {
                 dup2(fds[i - 1][READ], STDIN_FILENO);
+
+                if (redirect == 1)
+                {
+                    int fd_out;
+                    int redir_index = redirect_index(token_array, token_count);
+
+                    if (!strcmp(token_array[redir_index], ">"))
+                        fd_out = open(token_array[redir_index + 1], O_RDWR | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+                    else if (!strcmp(token_array[redir_index], ">>"))
+                        fd_out = open(token_array[redir_index + 1], O_RDWR | O_CREAT | O_APPEND, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+
+                    token_array[redir_index] = NULL;
+
+                    dup2(fd_out, STDOUT_FILENO);
+                }
+            }
             else
             { // diaforetika enwnw kai ta 2 akra tou pipe me to process
                 dup2(fds[i][WRITE], STDOUT_FILENO);
@@ -387,6 +410,17 @@ void handle_pipes(char **token_array, int num_pipes, int token_count, int backgr
 
     pid_t shell_pgid = getpid();
     tcsetpgrp(STDIN_FILENO, shell_pgid); // to shell pairnei pali ton elegxo tou controlling terminal kai synexizei na diavazei input
+}
+
+int redirect_index(char **token_array, int token_count)
+{
+    for (int i = 0; i < token_count; i++)
+    {
+        if (token_array[i] != NULL && (!strcmp(token_array[i], ">") || !strcmp(token_array[i], ">>")))
+            return i;
+    }
+
+    return -1;
 }
 
 int command_to_exec(char **token_array, int nth_command, int token_count)
@@ -437,4 +471,20 @@ int token_count(char *token_array[])
         count++;
 
     return count;
+}
+
+void change_dir(char *path)
+{
+    int res;
+
+    if (path == NULL || !strcmp(path, "~"))
+        res = chdir(getenv("HOME"));
+
+    else
+        res = chdir(path);
+
+    if (res)
+        printf("Failed to change directory.\n");
+
+    return;
 }

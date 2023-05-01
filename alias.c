@@ -33,6 +33,7 @@ int createalias(aliasnode **alias_array, char *token_array[])
         command = strcat(command, " ");
         i++;
     }
+
     strcpy(new_alias->command, command);
     free(command);
 

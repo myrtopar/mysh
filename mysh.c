@@ -34,7 +34,7 @@ int main()
 
     while (1)
     {
-        printf(COLOR_RED BOLD "mysh> " COLOR_RESET);
+        printf(COLOR_BRIGHT_GREEN BOLD "mysh> " COLOR_RESET);
         fflush(stdout);
 
         fgets(command, MAX_CHAR_INPUT, stdin);
@@ -53,7 +53,7 @@ int main()
         int redirect_input_flag = if_exists(command, '<');
         int pipe_flag = if_exists(command, '|');
         int bg_flag = if_exists(command, '&');
-        int asterisk_flag = if_exists(command, '*');
+        int wildcard_flag = if_exists(command, '*') || if_exists(command, '?');
 
         char *input = add_whitespaces(command, occ);
 
@@ -65,11 +65,12 @@ int main()
         parse_command(input, token_array);
         int count = token_count(token_array);
 
-        if (count == 0) // αν η γραμμη δεν εχει κανενα token, προχώρα
+        if (count == 0) // if there are no tokens in the line, continue to fgets again
         {
             continue;
         }
 
+        // Checking for history command
         if (!strcmp(token_array[0], "myhistory") && token_array[1] == NULL)
         {
             show_history(history_array, nth_command);
@@ -90,6 +91,7 @@ int main()
             count = token_count(token_array);
         }
 
+        // Checking for exit command
         if (!strcmp(token_array[0], "exit")) // exit shell
         {
             printf("logout\n");
@@ -97,6 +99,14 @@ int main()
             break;
         }
 
+        // Checking for cd command
+        if (!strcmp(token_array[0], "cd"))
+        {
+            change_dir(token_array[1]);
+            continue;
+        }
+
+        // Checking for alias commands
         if (!strcmp(token_array[0], "createalias"))
         {
             if (createalias(alias_array, token_array) == 0)
@@ -106,9 +116,10 @@ int main()
         else if (!strcmp(token_array[0], "destroyalias"))
         {
             destroyalias(alias_array, token_array[1]);
+            continue;
         }
 
-        // elegxos an i entoli pou dothike einai alias i oxi
+        // searching if the command is an alias to some unix command defined in the past
         aliasnode *alias = search_alias(alias_array, token_array[0]);
         if (alias != NULL)
         {
@@ -121,10 +132,9 @@ int main()
             count = token_count(token_array);
         }
 
-        if (asterisk_flag)
+        if (wildcard_flag)
         {
-
-            expand_asterisk(token_array, redirect_input_flag, redirect_output_flag, pipe_flag, bg_flag);
+            expand_asterisk(token_array, redirect_input_flag, redirect_output_flag, pipe_flag, num_pipes, bg_flag);
             continue;
         }
 
@@ -133,14 +143,14 @@ int main()
             execute_simple_command(token_array, bg_flag);
         }
 
-        else if (redirect_input_flag || redirect_output_flag || !pipe_flag) // handling redirections ONLY
+        else if ((redirect_input_flag || redirect_output_flag) && !pipe_flag) // handling redirections ONLY
         {
             handle_redirections(token_array, bg_flag);
         }
 
         else if (pipe_flag)
         {
-            handle_pipes(token_array, num_pipes, count, bg_flag);
+            handle_pipes(token_array, num_pipes, count, bg_flag, redirect_output_flag);
         }
 
         free(input);

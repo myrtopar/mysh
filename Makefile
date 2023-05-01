@@ -1,4 +1,4 @@
-mysh: mysh.c functions.c
+mysh: mysh.c functions.c history.c wildcard.c alias.c
 	gcc -c mysh.c
 	gcc -c functions.c
 	gcc -c wildcard.c
