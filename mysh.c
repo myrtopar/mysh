@@ -1,5 +1,12 @@
 #include "functions.h"
 
+void interrupt_handlerr(int signum)
+{
+    // exiting child process...
+    printf("about to terminate...\n");
+    exit(130);
+}
+
 int main()
 {
     signal(SIGINT, SIG_IGN);
@@ -62,11 +69,13 @@ int main()
         strcpy(history_array[index], input);
         nth_command++;
 
-        parse_command(input, token_array);
+        char *input_dup = parse_command(input, token_array);
         int count = token_count(token_array);
 
         if (count == 0) // if there are no tokens in the line, continue to fgets again
         {
+            free(input);
+            free(input_dup);
             continue;
         }
 
@@ -74,6 +83,8 @@ int main()
         if (!strcmp(token_array[0], "myhistory") && token_array[1] == NULL)
         {
             show_history(history_array, nth_command);
+            free(input);
+            free(input_dup);
             continue;
         }
 
@@ -84,6 +95,8 @@ int main()
             if (num > 20 || num == 0)
             {
                 printf("Invalid number\n");
+                free(input);
+                free(input_dup);
                 continue;
             }
             char *nth = history_array[index - num];
@@ -94,6 +107,8 @@ int main()
         // Checking for exit command
         if (!strcmp(token_array[0], "exit")) // exit shell
         {
+            free(input);
+            free(input_dup);
             printf("logout\n");
             fflush(stdout);
             break;
@@ -103,6 +118,8 @@ int main()
         if (!strcmp(token_array[0], "cd"))
         {
             change_dir(token_array[1]);
+            free(input);
+            free(input_dup);
             continue;
         }
 
@@ -111,11 +128,16 @@ int main()
         {
             if (createalias(alias_array, token_array) == 0)
                 printf("Error creating alias. This alias already exists.\n");
+
+            free(input);
+            free(input_dup);
             continue;
         }
         else if (!strcmp(token_array[0], "destroyalias"))
         {
             destroyalias(alias_array, token_array[1]);
+            free(input);
+            free(input_dup);
             continue;
         }
 
@@ -128,13 +150,15 @@ int main()
             pipe_flag = if_exists(alias->command, '|');
             bg_flag = if_exists(alias->command, '&');
 
-            parse_command(alias->command, token_array);
+            parse_command(alias->command, token_array); // parse the actual unix command that corresponds to the alias
             count = token_count(token_array);
         }
 
         if (wildcard_flag)
         {
-            expand_asterisk(token_array, redirect_input_flag, redirect_output_flag, pipe_flag, num_pipes, bg_flag);
+            expand_wildcard(token_array, redirect_input_flag, redirect_output_flag, pipe_flag, num_pipes, bg_flag);
+            free(input);
+            free(input_dup);
             continue;
         }
 
@@ -154,7 +178,8 @@ int main()
         }
 
         free(input);
-        // end of while loop
+        free(input_dup);
+        //    end of while loop
     }
 
     for (int i = 0; i < 20; i++)

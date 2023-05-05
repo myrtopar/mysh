@@ -1,6 +1,6 @@
 #include "functions.h"
 
-void expand_asterisk(char **token_array, int in_redirect, int out_redirect, int pipe, int num_pipes, int bg)
+void expand_wildcard(char **token_array, int in_redirect, int out_redirect, int pipe, int num_pipes, int bg)
 {
     char *expanded_token_array[MAX_ARGS];
     int i = 0, j = 0;

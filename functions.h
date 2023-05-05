@@ -29,7 +29,7 @@ struct aliasnode
 int occurences(char *, int);
 char *add_whitespaces(char *, int);
 int if_exists(char *, int);
-void parse_command(char *, char **);
+char *parse_command(char *, char **);
 void execute_simple_command(char **, int);
 void handle_redirections(char **, int);
 void handle_pipes(char **, int, int, int, int);
@@ -41,6 +41,6 @@ int token_count(char **);
 int createalias(aliasnode **, char **);
 aliasnode *search_alias(aliasnode **, char *);
 void destroyalias(aliasnode **, char *);
-void expand_asterisk(char **, int, int, int, int, int);
+void expand_wildcard(char **, int, int, int, int, int);
 int redirect_index(char **, int);
 void change_dir(char *);
